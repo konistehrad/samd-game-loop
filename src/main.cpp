@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
-#include <IRLibAll.h>
+#include <IRLibRecvPCI.h>
+#include <IRLibDecodeBase.h>
+#include <IRLib_P02_Sony.h>
 #include <Reactduino.h>
 
 #define FPS 30.0f
@@ -36,7 +38,7 @@ inline void digitalWriteDirect(int PIN, bool val) {
 uint32_t currentColor = 0x33;
 uint32_t ledColors[LED_COUNT] = {0};
 uint16_t currentIdx = 0;
-uint16_t brightness = 1;
+uint16_t brightness = 60;
 uint16_t hueWrap = 0;
 Adafruit_NeoPixel strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 IRrecvPCI irReceiver(PIN_IR_RECEIVER);
@@ -73,7 +75,7 @@ Reactduino app([] () {
 
   strip.begin();
   strip.setBrightness(brightness);
-  strip.fill(0x330000);
+  strip.fill(0xffffffff);
   strip.show();
 
   irReceiver.enableIRIn(); // Start the receiver
@@ -103,6 +105,7 @@ Reactduino app([] () {
   });
 
   app.repeat((uint32_t)(1000.0f / FPS), [] () {
+    hueWrap += 20;
     strip.fill(strip.ColorHSV(hueWrap, 255, 255));
     strip.show();
 
