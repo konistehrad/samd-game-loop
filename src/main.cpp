@@ -3,7 +3,7 @@
 #include <IRLibAll.h>
 #include <Reactduino.h>
 
-#define FPS 30
+#define FPS 30.0f
 
 #define MOD_PER_CLICK         10
 #define LED_COUNT             (10u)
@@ -102,7 +102,7 @@ Reactduino app([] () {
     }
   });
 
-  app.repeat((1000 / FPS), [] () {
+  app.repeat((uint32_t)(1000.0f / FPS), [] () {
     strip.fill(strip.ColorHSV(hueWrap, 255, 255));
     strip.show();
 
