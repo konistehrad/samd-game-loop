@@ -3,19 +3,19 @@
 #include <IRLibRecvPCI.h>
 #include <IRLibDecodeBase.h>
 #include <IRLib_P02_Sony.h>
-#include <Reactduino.h>
+// #include <Reactduino.h>
 
 #define FPS 30.0f
 
 #define MOD_PER_CLICK         10
 #define LED_COUNT             (10u)
 
-#define PIN_IR_PROX           (10u)
 #define PIN_BUTTON_LEFT       (4u)
 #define PIN_BUTTON_RIGHT      (5u)
 #define PIN_SLIDE_SWITCH      (7u)
 #define PIN_NEOPIXEL          (8u)
 #define PIN_SPEAKER_SHUTDOWN  (11u)
+#define PIN_IR_PROX           (10u)
 #define PIN_IR_RECEIVER       (26u)
 
 inline void digitalWriteHigh(int PIN) {
@@ -44,20 +44,18 @@ Adafruit_NeoPixel strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 IRrecvPCI irReceiver(PIN_IR_RECEIVER);
 IRdecodeSony irDecoder; 
 
-void decreaseBrightness(uint8_t amount) {
+inline void decreaseBrightness(uint8_t amount) {
   brightness = amount > brightness ? 0 : brightness - amount;
   strip.setBrightness(brightness);
 }
 
-void increaseBrightness(uint8_t amount) {
+inline void increaseBrightness(uint8_t amount) {
     uint16_t result = amount + brightness;
     brightness = result > 255 ? 255 : result;
     strip.setBrightness(brightness);
 }
 
-// bool shadowState;
-//------------------------------------------------------------------------------
-Reactduino app([] () {
+void initialize() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -79,6 +77,29 @@ Reactduino app([] () {
   strip.show();
 
   irReceiver.enableIRIn(); // Start the receiver
+}
+
+void tryParseIR() {
+  if(irReceiver.getResults()) {
+    if(irDecoder.decode() && irDecoder.protocolNum == SONY) {
+      switch(irDecoder.value) {
+        case 0x240C: increaseBrightness(1); break;
+        case 0x640C: decreaseBrightness(1); break;
+        case 0x6F0D: hueWrap += 500; break; // right  decreaseBrightness(); break;
+        case 0x2F0D: hueWrap -= 500; break; // left
+        case 0x0F0D: increaseBrightness(20); break; // up
+        case 0x4F0D: decreaseBrightness(20); break; // down
+        case 0x180C: break; // enter
+        default:     irDecoder.dumpResults(false);
+      }
+    }
+    irReceiver.enableIRIn();
+  }
+}
+
+/*
+//------------------------------------------------------------------------------
+Reactduino app([] () {
 
   app.onPinRisingNoInt(PIN_BUTTON_LEFT , [] () { decreaseBrightness(10); });
   app.onPinRisingNoInt(PIN_BUTTON_RIGHT, [] () { increaseBrightness(10); });
@@ -86,22 +107,6 @@ Reactduino app([] () {
     int x = digitalReadDirect(PIN_IR_RECEIVER);
     digitalWriteDirect(LED_BUILTIN, !x);
 
-    if(irReceiver.getResults()) {
-      if(irDecoder.decode() && irDecoder.protocolNum == SONY) {
-        switch(irDecoder.value) {
-          case 0x240C: increaseBrightness(1); break;
-          case 0x640C: decreaseBrightness(1); break;
-          case 0x6F0D: hueWrap += 500; break; // right  decreaseBrightness(); break;
-          case 0x2F0D: hueWrap -= 500; break; // left
-          case 0x0F0D: increaseBrightness(20); break; // up
-          case 0x4F0D: decreaseBrightness(20); break; // down
-          case 0x180C: break; // enter
-
-          default:     irDecoder.dumpResults(false);
-        }
-      }
-      irReceiver.enableIRIn();  
-    }
   });
 
   app.repeat((uint32_t)(1000.0f / FPS), [] () {
@@ -120,6 +125,6 @@ Reactduino app([] () {
       if(currentColor == 0 || currentColor == 0x33000000) currentColor = 0x33;
       currentIdx = 0;
     }
-    */
   });
 });
+*/
