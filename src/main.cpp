@@ -1,13 +1,22 @@
 #include <Arduino.h>
+#include <ArduinoLowPower.h>
 #include <Adafruit_NeoPixel.h>
+#include <Adafruit_SleepyDog.h>
+#include <limits.h>
+#include <IRLibGlobals.h>
 #include <IRLibRecvPCI.h>
 #include <IRLibDecodeBase.h>
 #include <IRLib_P02_Sony.h>
-// #include <Reactduino.h>
+#include <Thread.h>
 
-#define FPS 30.0f
+#define NUMBER                float
+#define Time_t                unsigned long
 
-#define MOD_PER_CLICK         10
+#define FPS                   (60.0)
+#define MS_PER_FRAME          ((unsigned long)(1000.0 / FPS))
+#define US_PER_FRAME          ((unsigned long)(1000000.0 / FPS))
+
+#define MOD_PER_CLICK         (10)
 #define LED_COUNT             (10u)
 
 #define PIN_BUTTON_LEFT       (4u)
@@ -35,27 +44,24 @@ inline void digitalWriteDirect(int PIN, bool val) {
   else     digitalWriteLow(PIN);
 }
 
-uint32_t currentColor = 0x33;
-uint32_t ledColors[LED_COUNT] = {0};
-uint16_t currentIdx = 0;
-uint16_t brightness = 60;
+volatile uint16_t brightness = 1;
 uint16_t hueWrap = 0;
 Adafruit_NeoPixel strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 IRrecvPCI irReceiver(PIN_IR_RECEIVER);
-IRdecodeSony irDecoder; 
+IRdecodeSony irDecoder;
 
 inline void decreaseBrightness(uint8_t amount) {
   brightness = amount > brightness ? 0 : brightness - amount;
-  strip.setBrightness(brightness);
+  // strip.setBrightness(brightness);
 }
 
 inline void increaseBrightness(uint8_t amount) {
     uint16_t result = amount + brightness;
     brightness = result > 255 ? 255 : result;
-    strip.setBrightness(brightness);
+    // strip.setBrightness(brightness);
 }
 
-void initialize() {
+void commonSetup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -72,8 +78,8 @@ void initialize() {
   pinMode(A0, OUTPUT);
 
   strip.begin();
-  strip.setBrightness(brightness);
-  strip.fill(0xffffffff);
+  // strip.fill(0xff0000);
+  // strip.setBrightness(brightness);
   strip.show();
 
   irReceiver.enableIRIn(); // Start the receiver
@@ -83,12 +89,12 @@ void tryParseIR() {
   if(irReceiver.getResults()) {
     if(irDecoder.decode() && irDecoder.protocolNum == SONY) {
       switch(irDecoder.value) {
-        case 0x240C: increaseBrightness(1); break;
-        case 0x640C: decreaseBrightness(1); break;
-        case 0x6F0D: hueWrap += 500; break; // right  decreaseBrightness(); break;
-        case 0x2F0D: hueWrap -= 500; break; // left
-        case 0x0F0D: increaseBrightness(20); break; // up
-        case 0x4F0D: decreaseBrightness(20); break; // down
+        case 0x240C: increaseBrightness(1); break; // vol up
+        case 0x640C: decreaseBrightness(1); break; // vol down
+        case 0x6F0D: hueWrap += 500; break; // arrow right
+        case 0x2F0D: hueWrap -= 500; break; // arrow left
+        case 0x0F0D: increaseBrightness(20); break; // arrow up
+        case 0x4F0D: decreaseBrightness(20); break; // arrow down
         case 0x180C: break; // enter
         default:     irDecoder.dumpResults(false);
       }
@@ -97,34 +103,76 @@ void tryParseIR() {
   }
 }
 
-/*
-//------------------------------------------------------------------------------
-Reactduino app([] () {
+bool frameDropped = false;
+bool state = false;
+unsigned long now = 0;
+unsigned long lastTime = 0;
+float dt;
 
-  app.onPinRisingNoInt(PIN_BUTTON_LEFT , [] () { decreaseBrightness(10); });
-  app.onPinRisingNoInt(PIN_BUTTON_RIGHT, [] () { increaseBrightness(10); });
-  app.onTick([] () {
-    int x = digitalReadDirect(PIN_IR_RECEIVER);
-    digitalWriteDirect(LED_BUILTIN, !x);
+void ledBusyFlash() {
+  state = !state;
+  strip.setPixelColor(LED_COUNT - 1, state ? 20 : 0, 0, 0);
+}
 
-  });
+void animTick() {
+  hueWrap += ((USHRT_MAX / 4) * dt);
+  auto color = strip.ColorHSV(hueWrap, 255, brightness);
+  strip.setPixelColor(0, color);
+  strip.show();
+}
 
-  app.repeat((uint32_t)(1000.0f / FPS), [] () {
-    hueWrap += 20;
-    strip.fill(strip.ColorHSV(hueWrap, 255, 255));
-    strip.show();
+Thread ledFlashThread = Thread(ledBusyFlash, 200);
+Thread animationThread = Thread(animTick, MS_PER_FRAME);
+Thread irThread = Thread(tryParseIR, 0);
 
-    /*
-    uint16_t i = currentIdx % LED_COUNT;
-    ledColors[i] ^= currentColor;
-    strip.setPixelColor(i, ledColors[i]);
-    strip.show();
-    currentIdx += 1;
-    if(currentIdx >= (LED_COUNT * 2)) {
-      currentColor = currentColor << 8;
-      if(currentColor == 0 || currentColor == 0x33000000) currentColor = 0x33;
-      currentIdx = 0;
-    }
-  });
-});
-*/
+void leftButtonInterrupt() {
+  if(digitalReadDirect(PIN_BUTTON_LEFT)) {
+    decreaseBrightness(10);
+  }
+}
+
+void rightButtonInterrupt() {
+  if(digitalReadDirect(PIN_BUTTON_RIGHT)) {
+    increaseBrightness(10);
+  }
+}
+
+void setup() {
+  commonSetup();
+  LowPower.attachInterruptWakeup(PIN_BUTTON_LEFT, leftButtonInterrupt, CHANGE);
+  LowPower.attachInterruptWakeup(PIN_BUTTON_RIGHT, rightButtonInterrupt, CHANGE);
+  lastTime = millis();
+}
+
+inline Time_t getDeltaTime(Time_t start, Time_t end) {
+  return (end >= start) ? 
+    (end - start) :            // standard delta
+    (ULONG_MAX - start) + end; // wraparound case
+}
+
+void loop() {
+  bool irReading = recvGlobal.currentState == STATE_RUNNING || recvGlobal.currentState == STATE_FINISHED;
+  now = millis();
+  Time_t deltaMs = getDeltaTime(lastTime, now);
+  dt = deltaMs / 1000.0;
+
+  Time_t startUs = micros();
+  if(ledFlashThread.shouldRun(now)) ledFlashThread.run();
+  if(animationThread.shouldRun(now)) animationThread.run();
+  if(irThread.shouldRun(now)) irThread.run();
+  Time_t endUs = micros();
+
+  lastTime = now;
+  Time_t frameUs = getDeltaTime(startUs, endUs);
+  frameDropped = (frameUs > US_PER_FRAME);
+  auto frameMs = frameDropped ? MS_PER_FRAME : frameUs / 1000;
+  if(!irReading && frameMs < MS_PER_FRAME) {
+    auto sleepTime = MS_PER_FRAME - frameMs;
+    Watchdog.enable(sleepTime, true);
+    LowPower.idle();
+    Watchdog.disable();
+    
+    state = !state;
+    digitalWriteDirect(LED_BUILTIN, state);
+  } 
+}
