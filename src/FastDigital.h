@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Fast read/write code from here: https://forum.arduino.cc/index.php?topic=129868.15
-
+// Broke it up to save a compare when you know what you're writing
 inline void digitalWriteHigh(int PIN) {
   PORT->Group[g_APinDescription[PIN].ulPort].OUTSET.reg = (1ul << g_APinDescription[PIN].ulPin);
 }
