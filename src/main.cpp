@@ -91,7 +91,7 @@ void pushPixels() {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   Serial.println("Begining initialization!");
   pinMode(LED_BUILTIN, OUTPUT);
