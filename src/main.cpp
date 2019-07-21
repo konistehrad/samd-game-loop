@@ -5,15 +5,11 @@
 #include <limits.h>
 #include <Thread.h>
 
-#include "FastDigital.h"
-#include "Input.h"
-
-#define NUMBER                float
-#define Time_t                unsigned long
-
 #define FPS                   (60.0)
-#define MS_PER_FRAME          ((unsigned long)(1000.0 / FPS))
-#define US_PER_FRAME          ((unsigned long)(1000000.0 / FPS))
+
+#include "FastDigital.h"
+#include "GameLoop.h"
+#include "Input.h"
 
 #define MOD_PER_CLICK         (10)
 #define LED_COUNT             (10u)
@@ -26,11 +22,10 @@
 #define PIN_IR_PROX           (10u)
 #define PIN_IR_RECEIVER       (26u)
 
-#define DELTA(start,end) ((end >= start) ? (end - start) : (ULONG_MAX - start) + end)
+void gameLoop(Time_t dt);
 
 volatile bool dirty = true;
 volatile uint16_t brightness = 1;
-
 uint32_t rotateTimer = 0;
 uint32_t rotateTime = 100;
 uint16_t hueWrap = USHRT_MAX / 4;
@@ -65,7 +60,37 @@ inline void decreaseHue(uint16_t amount) {
   dirty = true; hueWrap -= amount;
 }
 
-void commonSetup() {
+void animTick(bool force = false) {
+  if(dirty || force) {
+    auto color = /* Adafruit_NeoPixel::gamma32*/
+      (Adafruit_NeoPixel::ColorHSV(hueWrap, 255, brightness));
+    // strip.clear();
+    strip.fill(Adafruit_NeoPixel::ColorHSV(hueWrap + (USHRT_MAX / 4), 255, brightness));
+    strip.setPixelColor(idxA, color);
+    strip.setPixelColor(idxB, color);
+    dirty = true;
+  }
+}
+
+void checkRotate(Time_t dt) {
+  rotateTimer += dt;
+  if(rotateTimer > 100) 
+  {
+    idxA = (idxA + 1) % LED_COUNT;
+    idxB = (idxB + 1) % LED_COUNT;
+    dirty = true;
+    rotateTimer = 0;
+  }
+}
+
+void pushPixels() {
+  if(dirty) {
+    strip.show();
+    dirty = false;
+  }
+}
+
+void setup() {
   Serial.begin(9600);
 
   Serial.println("Begining initialization!");
@@ -85,55 +110,20 @@ void commonSetup() {
 
   strip.begin();
   strip.show();
-}
 
-bool state = false;
-Time_t now = 0;
-Time_t lastTime = 0;
-Time_t dt;
-
-void animTick(bool force = false) {
-  if(dirty || force) {
-    auto color = /* Adafruit_NeoPixel::gamma32*/
-      (Adafruit_NeoPixel::ColorHSV(hueWrap, 255, brightness));
-    // strip.clear();
-    strip.fill(Adafruit_NeoPixel::ColorHSV(hueWrap + (USHRT_MAX / 4), 255, brightness));
-    strip.setPixelColor(idxA, color);
-    strip.setPixelColor(idxB, color);
-    dirty = true;
-  }
-}
-
-void checkRotate() {
-  rotateTimer += dt;
-  if(rotateTimer > 100) 
-  {
-    idxA = (idxA + 1) % LED_COUNT;
-    idxB = (idxB + 1) % LED_COUNT;
-    dirty = true;
-    rotateTimer = 0;
-  }
-}
-
-void pushPixels() {
-  if(dirty) {
-    strip.show();
-    dirty = false;
-  }
-}
-
-void setup() {
-  commonSetup();
-  lastTime = millis();
-  animTick(true);
+  GameLoop.setup(gameLoop);
 }
 
 void loop() {
-  Time_t startMicros = micros();
-  now = millis();
-  dt = DELTA(lastTime, now);
-  auto command = input.tick(dt);
+  // forward the call!
+  GameLoop.loop();
+}
 
+void gameLoop(Time_t dt) {
+  // use LED_BUILTIN as a sort of CPU load indicator
+  digitalWriteDirect(LED_BUILTIN, HIGH);
+
+  auto command = input.tick(dt);
   switch(command.command) {
     case InputCommand::Brightness_Down: decreaseBrightness(command.payload); break;
     case InputCommand::Brightness_Up  : increaseBrightness(command.payload); break;
@@ -141,17 +131,10 @@ void loop() {
     case InputCommand::Hue_Up         : increaseHue(command.payload); break;
   }
 
-  checkRotate();
+  checkRotate(dt);
   animTick();
-  lastTime = now;
-
   pushPixels();
   digitalWriteDirect(LED_BUILTIN, LOW);
-  Time_t waitTime = MS_PER_FRAME - (DELTA(startMicros, micros()) / 1000);
-  Watchdog.enable(waitTime, true);
-  LowPower.idle();
-  Watchdog.disable();
-  digitalWriteDirect(LED_BUILTIN, HIGH);
 }
 
 
