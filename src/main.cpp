@@ -24,8 +24,8 @@
 
 void gameLoop(Time_t dt);
 
-volatile bool dirty = true;
-volatile uint16_t brightness = 1;
+bool dirty = true;
+uint16_t brightness = 1;
 uint32_t rotateTimer = 0;
 uint32_t rotateTime = 100;
 uint16_t hueWrap = USHRT_MAX / 4;
