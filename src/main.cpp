@@ -6,6 +6,7 @@
 #include <Thread.h>
 
 #include "FastDigital.h"
+#include "Input.h"
 
 #define NUMBER                float
 #define Time_t                unsigned long
@@ -35,6 +36,7 @@ uint32_t rotateTime = 100;
 uint16_t hueWrap = USHRT_MAX / 4;
 uint16_t idxA = 0;
 uint16_t idxB = LED_COUNT / 2;
+InputParser input;
 Adafruit_NeoPixel strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 void delayFlash(uint8_t times, uint32_t delayTime) {
@@ -66,15 +68,8 @@ inline void decreaseHue(uint16_t amount) {
 void commonSetup() {
   Serial.begin(9600);
 
-  delayFlash(2, 1000);
-
   Serial.println("Begining initialization!");
   pinMode(LED_BUILTIN, OUTPUT);
-
-  // Express input modules
-  pinMode(PIN_BUTTON_LEFT,  INPUT_PULLDOWN);
-  pinMode(PIN_BUTTON_RIGHT, INPUT_PULLDOWN);
-  pinMode(PIN_SLIDE_SWITCH, INPUT_PULLUP);
 
   // disable speaker on this sketch
   pinMode(PIN_SPEAKER_SHUTDOWN, OUTPUT);
@@ -82,6 +77,11 @@ void commonSetup() {
 
   // but leave the analog output available
   pinMode(A0, OUTPUT);
+
+  if(!input.begin()) {
+    Serial.println("Input initialization failed!");
+    while(true) delayFlash(1, 1000);
+  }
 
   strip.begin();
   strip.show();
@@ -91,26 +91,6 @@ bool state = false;
 Time_t now = 0;
 Time_t lastTime = 0;
 Time_t dt;
-
-inline bool HueMode() { return digitalReadDirect(PIN_SLIDE_SWITCH); }
-inline bool ButtonLeft() { return digitalReadDirect(PIN_BUTTON_LEFT); }
-inline bool ButtonRight() { return digitalReadDirect(PIN_BUTTON_RIGHT); }
-
-void parseInput() {
-  if(HueMode()) {
-    if(ButtonLeft()) {
-      decreaseHue(map(dt, 0, 4000, 0, USHRT_MAX));
-    } else if(ButtonRight()) {
-      increaseHue(map(dt, 0, 4000, 0, USHRT_MAX));
-    }
-  } else {
-    if(ButtonLeft()) {
-      decreaseBrightness(map(dt, 0, 1000, 0, 64) );
-    } else if(ButtonRight()) {
-      increaseBrightness(map(dt, 0, 1000, 0, 64) );
-    }
-  }
-}
 
 void animTick(bool force = false) {
   if(dirty || force) {
@@ -152,11 +132,17 @@ void loop() {
   Time_t startMicros = micros();
   now = millis();
   dt = DELTA(lastTime, now);
-  parseInput();
+  auto command = input.tick(dt);
+
+  switch(command.command) {
+    case InputCommand::Brightness_Down: decreaseBrightness(command.payload); break;
+    case InputCommand::Brightness_Up  : increaseBrightness(command.payload); break;
+    case InputCommand::Hue_Down       : decreaseHue(command.payload); break;
+    case InputCommand::Hue_Up         : increaseHue(command.payload); break;
+  }
+
   checkRotate();
   animTick();
-
-
   lastTime = now;
 
   pushPixels();
