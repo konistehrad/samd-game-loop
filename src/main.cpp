@@ -1,7 +1,5 @@
 #include <Arduino.h>
 #include <ArduinoLowPower.h>
-#include <Adafruit_LIS3DH.h>
-#include <Adafruit_Sensor.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_SleepyDog.h>
 #include <limits.h>
@@ -19,9 +17,6 @@
 #define MOD_PER_CLICK         (10)
 #define LED_COUNT             (10u)
 
-#define CPLAY_LIS3DH_INTERRUPT (27)
-#define CPLAY_LIS3DH_CS       (-1)
-#define CPLAY_LIS3DH_ADDRESS  (0x19)
 #define PIN_BUTTON_LEFT       (4u)
 #define PIN_BUTTON_RIGHT      (5u)
 #define PIN_SLIDE_SWITCH      (7u)
@@ -40,8 +35,14 @@ uint32_t rotateTime = 100;
 uint16_t hueWrap = USHRT_MAX / 4;
 uint16_t idxA = 0;
 uint16_t idxB = LED_COUNT / 2;
-Adafruit_LIS3DH lis = Adafruit_LIS3DH(CPLAY_LIS3DH_CS);
 Adafruit_NeoPixel strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+
+void delayFlash(uint8_t times, uint32_t delayTime) {
+  for(uint8_t i = 0; i < times; ++i) {
+    digitalWriteDirect(LED_BUILTIN, HIGH); delay(delayTime);
+    digitalWriteDirect(LED_BUILTIN, LOW); delay(delayTime);
+  }
+}
 
 inline void decreaseBrightness(uint8_t amount) {
   dirty = true;
@@ -63,7 +64,11 @@ inline void decreaseHue(uint16_t amount) {
 }
 
 void commonSetup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
+
+  delayFlash(2, 1000);
+
+  Serial.println("Begining initialization!");
   pinMode(LED_BUILTIN, OUTPUT);
 
   // Express input modules
@@ -80,15 +85,6 @@ void commonSetup() {
 
   strip.begin();
   strip.show();
-
-  // irReceiver.enableIRIn(); // Start the receiver
-}
-
-void delayFlash(uint8_t times, uint32_t delayTime) {
-  for(uint8_t i = 0; i < times; ++i) {
-    digitalWriteDirect(LED_BUILTIN, HIGH); delay(delayTime);
-    digitalWriteDirect(LED_BUILTIN, LOW); delay(delayTime);
-  }
 }
 
 bool state = false;
@@ -99,13 +95,6 @@ Time_t dt;
 inline bool HueMode() { return digitalReadDirect(PIN_SLIDE_SWITCH); }
 inline bool ButtonLeft() { return digitalReadDirect(PIN_BUTTON_LEFT); }
 inline bool ButtonRight() { return digitalReadDirect(PIN_BUTTON_RIGHT); }
-void parseAcceleration() {
-  lis.read();      // get X Y and Z data at once
-  // Then print out the raw data
-  Serial.print("X:  "); Serial.print(lis.x); 
-  Serial.print("  \tY:  "); Serial.print(lis.y); 
-  Serial.print("  \tZ:  "); Serial.print(lis.z); 
-}
 
 void parseInput() {
   if(HueMode()) {
@@ -154,17 +143,8 @@ void pushPixels() {
 }
 
 void setup() {
-  delayFlash(4, 250);
   commonSetup();
   lastTime = millis();
-  
-  if(!lis.begin(CPLAY_LIS3DH_ADDRESS)) {
-    Serial.println("ERROR: failed to initialize accelerometer!");
-    while(true) delayFlash(1, 100);
-  } else {
-    lis.setRange(LIS3DH_RANGE_2_G);
-  }
-
   animTick(true);
 }
 
