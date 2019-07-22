@@ -20,7 +20,6 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define KAHN_GAMELOOP_H
 
 #include <Arduino.h>
-#include <ArduinoLowPower.h>
 #include <Adafruit_SleepyDog.h>
 
 #ifndef FPS
@@ -29,20 +28,22 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef Time_t
   #define Time_t unsigned long
+  #define Time_t_MAX   (ULONG_MAX)
 #endif
 
 #ifndef Number_t
   #define Number_t float
 #endif
 
-#define MS_PER_FRAME          ((unsigned long)(1000.0 / FPS))
-#define US_PER_FRAME          ((unsigned long)(1000000.0 / FPS))
+#define MS_PER_FRAME          ((Time_t)(1000.0 / FPS))
+#define US_PER_FRAME          ((Time_t)(1000000.0 / FPS))
+#define US_WAIT_THRESHOLD     ((Time_t)3000)     // at least 3ms is required to go into idle mode
 
-#define KAHN_DELTA(start,end) ((end >= start) ? (end - start) : (ULONG_MAX - start) + end)
+#define KAHN_DELTA(start,end) ((end >= start) ? (end - start) : (Time_t_MAX - start) + end)
 
 typedef void (*gameLoopFuncPtr)(Time_t);
 
-class GameLoop_t {
+class GameLoop {
   public:
     void setup(gameLoopFuncPtr c) { 
       callback = c; 
@@ -57,16 +58,15 @@ class GameLoop_t {
       callback(dt);
 
       lastTime = now;
-      Time_t waitTime = MS_PER_FRAME - (KAHN_DELTA(startMicros, micros()) / 1000);
-      // we use both watchdog and LowPower here, which seems like a lot but hear me out:
-      // Watchdog allows us to easily set sleep timers with ms resolution
-      //     LowPower only support second-resolution via RTC
-      // However, LowPower has the not-so-aggressive `idle` (sleep is too much for us)
-      // and also allows us to assign interrupts to inputs if we so desire. It's a pain,
-      // but it really is the most flexible solution
-      Watchdog.enable(waitTime, true);
-      LowPower.idle();
-      Watchdog.disable();
+      // Do we have more than 3ms to wait?
+      Time_t deltaMicros = (KAHN_DELTA(startMicros, micros()));
+      if(deltaMicros < (US_PER_FRAME - US_WAIT_THRESHOLD)) 
+      {
+        // TODO: can we avoid the divide here? Might be slow on M0.
+        // XXX: would deltaMicros >> 10 work? Is it close enough?
+        Time_t waitMs = (US_PER_FRAME - deltaMicros) >> 10;
+        idle(waitMs);
+      }
     }
 
   protected:
@@ -74,8 +74,16 @@ class GameLoop_t {
     Time_t now;
     Time_t dt;
     Time_t lastTime;
-};
+    void idle(uint32_t waitTimeMs) {
+      if(waitTimeMs == 0) return;
 
-GameLoop_t GameLoop;
+      Watchdog.enable(waitTimeMs, true);
+      SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+      PM->SLEEP.reg = 2;
+      __DSB();
+      __WFI();
+      Watchdog.disable();
+    }
+};
 
 #endif

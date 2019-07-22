@@ -37,13 +37,9 @@ bool InputParser::begin() {
     Serial.println("ACCEL INIT FAILED!");
     return false;
   } else {
-
-    // have a procedure called when a tap is detected
-    // use LowPower routines to guarantee wake from sleep/idle
-    LowPower.attachInterruptWakeup(CPLAY_LIS3DH_INTERRUPT, wakeForAccel, FALLING);
-
     lis.setRange(LIS3DH_RANGE_2_G);
-    lis.setClick(1, CLICKTHRESHHOLD, 10, 20, 255); 
+    lis.setClick(1, CLICKTHRESHHOLD, 10, 20, 255);
+    attachInterrupt(digitalPinToInterrupt(CPLAY_LIS3DH_INTERRUPT), wakeForAccel, FALLING);
   }
   return true;
 }

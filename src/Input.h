@@ -31,7 +31,6 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define CLICKTHRESHHOLD 120
 
 #include <Arduino.h>
-#include <ArduinoLowPower.h>
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_Sensor.h>
 
