@@ -17,9 +17,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 #include <Arduino.h>
-#include <Adafruit_NeoPixel.h>
+#include <Adafruit_NeoPixel_ZeroDMA.h>
 
-#define FPS                   (120.0)
+#define FPS                   (60.0)
 
 #include "FastDigital.h"
 #include "GameLoop.h"
@@ -39,7 +39,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 void gameLoop(Time_t dt);
 
 InputParser input;
-Adafruit_NeoPixel strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel_ZeroDMA strip(LED_COUNT, PIN_NEOPIXEL, NEO_GRB);
 NeoPixelDisplay display(strip);
 GameLoop looper;
 

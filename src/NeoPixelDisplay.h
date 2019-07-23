@@ -15,7 +15,7 @@ class NeoPixelDisplay {
     void tick(Time_t dtMs);
 
     void decreaseBrightness(uint8_t amount) {
-      dirty = true; brightness = amount > brightness ? 0 : brightness - amount;
+      dirty = true; brightness = amount >= brightness ? 1 : brightness - amount;
     }
 
     void increaseBrightness(uint8_t amount) {
@@ -32,7 +32,7 @@ class NeoPixelDisplay {
     uint16_t brightness = 0;
     uint32_t rotateTimer = 0;
     uint32_t rotateTime = 100;
-    EwmaT<uint32_t> filter = EwmaT<uint32_t>(15, 1000);
+    EwmaT<uint32_t> filter = EwmaT<uint32_t>(25, 1000);
     uint16_t hueWrap = USHRT_MAX / 4;
     uint16_t idxA = 0;
     uint16_t idxB = 0;
